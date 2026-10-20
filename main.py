@@ -1,127 +1,69 @@
 
-from collections import namedtuple
+from collections import deque
+from products import (
+    Product,
+    catalog,
+    product_names,
+    search_product,
+    display_products,
+    calculate_inventory_value,
+)
 
-# Product records are immutable namedtuples.
-Product = namedtuple("Product", ["name", "price", "stock"])
+from cart import (
+    cart_stack,
+    clear_cart,
+    add_to_cart,
+    undo_last_add,
+    view_cart,
+)
 
+from orders import (
+    Order,
+    Node,
+    LinkedList,
+    order_queue,
+    sales_count,
+    customer_histories,
+    place_order,
+    process_next_order,
+    display_pending_orders,
+)
 
-# Product ID -> Product
-catalog = {
-    "P101": Product("Laptop", 62000, 5),
-    "P102": Product("Mouse", 750, 20),
-    "P103": Product("Keyboard", 1500, 12),
-    "P104": Product("Headphones", 2500, 8),
-    "P105": Product("Smartphone", 25000, 10),
-}
+from categories import (
+    CategoryNode,
+    root_category,
+    electronics,
+    clothing,
+    phones,
+    laptops,
+    accessories,
+    men,
+    women,
+    get_products_in_category,
+    browse_category,
+)
 
-# Fast membership checks for product names.
-product_names = {
-    product.name.lower()
-    for product in catalog.values()
-}
-
-# Each entry records one addition to the cart.
-# This list is used as a stack so the latest addition can be undone.
-cart_stack = []
-
-
-def search_product(name):
-    """Return (product_id, product), or None if not found."""
-    normalized_name = name.strip().lower()
-
-    # Step 1: Fast membership check using the existing set.
-    if normalized_name not in product_names:
-        return None
-
-    # Step 2: Find the full product record.
-    for product_id, product in catalog.items():
-        if product.name.lower() == normalized_name:
-            return product_id, product
-
-    return None
-
-
-def display_products(products=catalog):
-    """Display products and return the number displayed."""
-    print("\n--- PyMart Product Catalog ---")
-
-    for product_id, product in products.items():
-        print(
-            f"{product_id} | {product.name} | "
-            f"Rs. {product.price:,} | Stock: {product.stock}"
-        )
-
-    return len(products)
+from recommendations import recommendation_graph, recommend_products
 
 
-def calculate_inventory_value():
-    inventory_values = {
-        product_id: product.price * product.stock
-        for product_id, product in catalog.items()
-    }
-
-    return sum(inventory_values.values())
-
-def clear_cart():
-    """Remove all items from the shopping cart."""
-    cart_stack.clear()
-    return True
 
 
-def add_to_cart(product_id, quantity=1):
-    """Add one cart entry if the product and quantity are valid."""
-    if product_id not in catalog:
-        return False, "Product ID not found."
+def get_positive_integer(prompt):
+    """Keep asking until the user enters a positive integer."""
+    while True:
+        value = input(prompt).strip()
 
-    if not isinstance(quantity, int) or isinstance(quantity, bool):
-        return False, "Quantity must be a whole number."
+        try:
+            number = int(value)
+        except ValueError:
+            print("Please enter a valid whole number.")
+            continue
 
-    if quantity <= 0:
-        return False, "Quantity must be greater than zero."
+        if number <= 0:
+            print("Please enter a number greater than zero.")
+            continue
 
-    product = catalog[product_id]
-
-    # Include previous additions when checking available stock.
-    already_added = sum(
-        qty for pid, qty in cart_stack if pid == product_id
-    )
-
-    if already_added + quantity > product.stock:
-        return False, "Not enough stock available."
-
-    cart_stack.append((product_id, quantity))
-    return True, f"Added {quantity} x {product.name}."
-
-
-def undo_last_add():
-    """Undo the most recent cart addition."""
-    if not cart_stack:
-        return None
-
-    return cart_stack.pop()
-
-
-def view_cart():
-    """Display cart totals and return the total price."""
-    if not cart_stack:
-        print("\nYour cart is empty.")
-        return 0
-
-    total = 0
-
-    print("\n--- Shopping Cart ---")
-
-    for product_id, quantity in cart_stack:
-        product = catalog[product_id]
-        subtotal = product.price * quantity
-        total += subtotal
-
-        print(
-            f"{product.name} x {quantity} = Rs. {subtotal:,}"
-        )
-
-    print(f"Cart total: Rs. {total:,}")
-    return total
+        return number
 
 
 def main():
@@ -134,6 +76,12 @@ def main():
         print("5. View cart")
         print("6. Show inventory value")
         print("7. Clear cart")
+        print("8. Place order")
+        print("9. Process next order")
+        print("10. Display pending orders")
+        print("11. View customer order history")
+        print("12. Browse products by category")
+        print("13. Get product recommendations")
         print("0. Exit")
 
         choice = input("Choose an option: ").strip()
@@ -151,20 +99,13 @@ def main():
                 product_id, product = result
                 print(product_id, product)
 
+       
         elif choice == "3":
-            product_id = input("Enter product ID: ").strip()
+            product_id = input("Enter product ID: ").strip().upper()
+            quantity = get_positive_integer("Enter quantity: ")
+            
+            add_to_cart(product_id, quantity)
 
-            # Basic validation without try/except.
-            quantity_text = input("Enter quantity: ").strip()
-
-            if not quantity_text.isdigit():
-                print("Enter a valid positive whole number.")
-                continue
-
-            success, message = add_to_cart(
-                product_id, int(quantity_text)
-            )
-            print(message)
 
         elif choice == "4":
             undone = undo_last_add()
@@ -181,13 +122,48 @@ def main():
         elif choice == "6":
             total_value = calculate_inventory_value()
             print(f"Total inventory value: Rs. {total_value:,}")
+       
+        elif choice == "7":
+            clear_cart()
+            print("Cart cleared successfully.")
+
+        elif choice == "8":
+            customer_name = input("Enter customer name: ")
+            success, message = place_order(customer_name)
+            print(message)
+
+        elif choice == "9":
+            order = process_next_order()
+            if order:
+                print(f"Processing order #{order.order_id}")
+            else:
+                print("No pending orders to process.")
+
+        elif choice == "10":
+            count = display_pending_orders()
+            print(f"Total pending orders: {count}")
+
+        
+        elif choice == "11":
+            customer_name = input("Enter customer name: ").strip()
+
+            if customer_name in customer_histories:
+                customer_histories[customer_name].print_history()
+            else:
+                print(f"No completed orders found for {customer_name}.")
+        elif choice == "12":
+            browse_category()
+        elif choice == "13":
+            product_id = input("Enter product ID: ").strip().upper()
+            recommend_products(product_id)
+
 
         elif choice == "0":
             print("Thank you for using PyMart!")
             break
 
         else:
-            print("Invalid option. Choose 0 to 5.")
+            print("Invalid option. Choose 0 to 13.")
 
 
 if __name__ == "__main__":
